@@ -1,0 +1,13 @@
+{
+  "name": "atacheats",
+  "version": "1.0.0",
+  "description": "AllThingsAlgebra cheat search",
+  "main": "server.js", 
+  "author": "sythora",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

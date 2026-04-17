@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sythora's ATA Search</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <meta name="description" content="ATA Worksheet Finder helps you quickly search and locate AllThingsAlgebra worksheet files by keyword. Fast, simple search tool for finding math resources." />
+<meta name="keywords" content="AllThingsAlgebra, worksheet finder, ATA search, math worksheets, algebra resources, solving quadratics, file search tool" />
+<meta name="author" content="Sythora" />
+<meta name="robots" content="index, follow" />
+<link rel="canonical" href="https://sythora.dev/" />
+<meta property="og:title" content="ATA Worksheet Finder" />
+<meta property="og:description" content="Search AllThingsAlgebra worksheet files instantly by keyword." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://sythora.dev/" />
+<meta property="og:image" content="https://avatars.githubusercontent.com/u/230734940?v=4" />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="ATA Worksheet Finder" />
+<meta name="twitter:description" content="Fast worksheet search tool for AllThingsAlgebra files." />
+<meta name="twitter:image" content="https://avatars.githubusercontent.com/u/230734940?v=4" />
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "ATA Worksheet Finder",
+  "description": "Search tool for locating AllThingsAlgebra worksheet files by keyword.",
+  "applicationCategory": "EducationalApplication",
+  "operatingSystem": "All",
+  "author": {
+    "@type": "Person",
+    "name": "Sythora"
+  }
+}
+</script>
+</head>
+<body>
+
+<header>
+  <h1>ATA Worksheet Finder</h1>
+  <p>allthingsalgebra.com worksheet finder </p>
+</header>
+
+<main class="main">
+
+  <div class="search-row">
+    <input type="text" id="keyword" value="Solving-Quadratics-Choosing" placeholder="filename keyword..." />
+    <input type="number" id="perPage" value="100" min="1" max="100" title="per page (max 100)" />
+    <button class="btn" id="startBtn" onclick="startsearch()">Run</button>
+    <button class="btn btn-stop" id="stopBtn" onclick="stopsearch()" disabled>Stop</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-val" id="statPages">0</div>
+      <div class="stat-label">Pages crawled</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val" id="statScanned">0</div>
+      <div class="stat-label">Items scanned</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val accent" id="statFound">0</div>
+      <div class="stat-label">Matches</div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <div class="dot" id="dot"></div>
+    <span id="statusMsg">Ready. enter a keyword and press Run</span>
+  </div>
+
+  <div class="results-header">
+    <span>Results</span>
+    <button class="copy-btn" onclick="copyAll()">Copy all URLs</button>
+  </div>
+
+  <div id="resultsList"></div>
+
+</main>
+
+<script>
+let es = null;
+let results = [];
+
+function setstatus(msg, state) {
+  document.getElementById('statusMsg').textContent = msg;
+
+  const dot = document.getElementById('dot');
+  dot.className = 'dot' + (state ? ' ' + state : '');
+}
+
+function setstats(pages, scanned, found) {
+  document.getElementById('statPages').textContent = pages ?? '-';
+  document.getElementById('statScanned').textContent = scanned ?? '-';
+  document.getElementById('statFound').textContent = found ?? 0;
+}
+
+function addresult(page, url) {
+  results.push(url);
+
+  const row = document.createElement('div');
+  row.className = 'result-row';
+  row.innerHTML = `
+    <span class="page-tag">p${page}</span>
+    <a class="result-url" href="${url}" target="_blank" rel="noopener">${url}</a>
+  `;
+
+  document.getElementById('resultsList').prepend(row);
+}
+
+function startsearch() {
+  const keyword = document.getElementById('keyword').value.trim();
+  const perpage = document.getElementById('perPage').value || 100;
+
+  if (!keyword) {
+    setstatus('type something bro', '');
+    return;
+  }
+
+  if (es) es.close();
+
+  results = [];
+  document.getElementById('resultsList').innerHTML = '';
+
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+
+  setstats(0, 0, 0);
+  setstatus(`searching for "${keyword}"...`, 'active');
+
+  es = new EventSource(`/api/search?keyword=${encodeURIComponent(keyword)}&perPage=${perpage}`);
+
+  es.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+
+    if (msg.type === 'match') {
+      addresult(msg.page, msg.url);
+
+    } else if (msg.type === 'progress') {
+      setstats(msg.page, msg.scanned, msg.found);
+      setstatus(`page ${msg.page} — ${msg.scanned} scanned, ${msg.found} found`, 'active');
+
+    } else if (msg.type === 'status') {
+      setstatus(msg.message, 'active');
+
+    } else if (msg.type === 'done') {
+      setstats(msg.pages, msg.scanned, msg.found);
+      setstatus(`done, ${msg.found} matches`, 'done');
+      finish();
+
+    } else if (msg.type === 'error') {
+      setstatus(`error: ${msg.message}`, 'error');
+      finish();
+    }
+  };
+
+  es.onerror = () => {
+    setstatus('connection error', 'error');
+    finish();
+  };
+}
+
+function stopsearch() {
+  if (es) {
+    es.close();
+    es = null;
+  }
+  setstatus('stopped', '');
+  finish();
+}
+
+function finish() {
+  if (es) {
+    es.close();
+    es = null;
+  }
+
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+}
+
+function copyall() {
+  if (!results.length) return;
+
+  navigator.clipboard.writeText(results.join('\n')).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = results.join('\n');
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  });
+}
+</script>
+
+</body>
+</html>
